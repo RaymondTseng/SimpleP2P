@@ -1,0 +1,6 @@
+indexingServer localhost 7123
+a localhost 7124 peersData/a/
+b localhost 7125 peersData/b/
+c localhost 7126 peersData/c/
+d localhost 7127 peersData/d/
+e localhost 7128 peersData/e/
