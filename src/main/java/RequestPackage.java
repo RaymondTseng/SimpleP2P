@@ -1,6 +1,9 @@
 import java.io.Serializable;
 import java.util.List;
 
+/**
+ * Class for building a request
+ */
 public class RequestPackage implements Serializable {
     private static final long serialVersionUID = 1386583756403881124L;
     // -1 -> failure, 0 -> register, 1 -> search, 2 -> obtain
@@ -31,4 +34,5 @@ public class RequestPackage implements Serializable {
     public List<String> getFileNames() {
         return fileNames;
     }
+
 }

@@ -4,25 +4,47 @@ import java.io.ObjectOutputStream;
 import java.net.*;
 import java.util.*;
 
+/**
+ * Class of IndexingServer
+ */
 public class IndexingServer extends Server implements Runnable{
     // fileName -> address + port
-    private Map<String, Set<String>> fileRecorder;
+    private Map<String, List<String>> fileRecorder;
+    // For polling algorithm, fileName -> index
+    private Map<String, Integer> pollingIndexer;
+    // Keep a socket for indexing server
     private ServerSocket serverSocket;
     public IndexingServer(String name, String address, int port) throws IOException {
         this.name = name;
         this.address = address;
         this.port = port;
-        this.fileRecorder = new HashMap<String, Set<String>>();
+        this.fileRecorder = new HashMap<String, List<String>>();
+        this.pollingIndexer = new HashMap<String, Integer>();
         this.serverSocket = new ServerSocket(port);
         System.out.println("Activate " + name + " " + address + " " + String.valueOf(port));
+        // Use another thread to run indexing server
         new Thread(this).start();
     }
 
+    /*
+    Check whether fileName exists in servers
+     */
     private void search(String fileName, Socket socket){
         RequestPackage rp;
         System.out.println("Finding " + fileName);
         if (fileRecorder.containsKey(fileName)) {
-            rp = new RequestPackage(1, this.address, this.port, new ArrayList<String>(fileRecorder.get(fileName)));
+            List<String> res = new ArrayList<String>();
+            List<String> fileNames = fileRecorder.get(fileName);
+            // Applying polling algorithm, put the recommended server in the first place
+            int _index = pollingIndexer.get(fileName);
+            int index = _index % fileNames.size();
+            res.add(fileNames.get(index));
+            for (int i = 0; i < fileNames.size(); i++){
+                if (i != index)
+                    res.add(fileNames.get(i));
+            }
+            rp = new RequestPackage(1, this.address, this.port, res);
+            pollingIndexer.put(fileName, _index + 1);
         }else{
             rp = new RequestPackage(-1, this.address, this.port, null);
         }
@@ -36,26 +58,35 @@ public class IndexingServer extends Server implements Runnable{
         }
     }
 
-    public void register(String address, int port, List<String> fileNames){
+    /*
+    Since many requests will register their files at the same time, register method must synchronize here
+     */
+    synchronized private void register(String address, int port, List<String> fileNames){
         for (String fileName : fileNames){
             String fullAddress = address + ";" + String.valueOf(port);
             if (fileRecorder.containsKey(fileName)){
                 fileRecorder.get(fileName).add(fullAddress);
             }else{
-                Set<String> addressSet = new HashSet<String>();
-                addressSet.add(fullAddress);
-                fileRecorder.put(fileName, addressSet);
+                List<String> addressList = new ArrayList<String>();
+                addressList.add(fullAddress);
+                fileRecorder.put(fileName, addressList);
+                pollingIndexer.put(fileName, 0);
             }
+            System.out.println("Register " + fileName + " Successfully!");
         }
 
     }
 
+    /*
+    Implement Runnable interface that this server can run in another thread
+     */
     public void run() {
-        //server的accept方法是阻塞式的
         Socket socket = null;
         try {
+            // keep accepting socket
             while (true) {
                 socket = this.serverSocket.accept();
+                // use another thread to process this socket
                 new Thread(new Task(socket)).start();
             }
         } catch (IOException e) {
@@ -63,6 +94,9 @@ public class IndexingServer extends Server implements Runnable{
         }
     }
 
+    /**
+     * A class for processing socket
+     */
     class Task implements Runnable{
         private Socket socket;
         public Task(Socket socket) {
@@ -74,6 +108,7 @@ public class IndexingServer extends Server implements Runnable{
             try{
                 ois = new ObjectInputStream(this.socket.getInputStream());
                 RequestPackage rp = (RequestPackage) ois.readObject();
+                // different types mean different requests
                 if (rp.getRequestType() == 0){
                     register(rp.getRequestAddress(), rp.getRequestPort(), rp.getFileNames());
                 }else if (rp.getRequestType() == 1){

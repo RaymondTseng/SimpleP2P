@@ -4,18 +4,30 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
+/**
+ * Main class for running, including an indexing server and a list of peers.
+ */
 public class P2PNetwork {
     private IndexingServer indexingServer;
     private List<Peer> peerList;
+    /*
+    Constructor method
+     */
     public P2PNetwork(String configFilePath){
         peerList = new ArrayList<Peer>();
+        // read the config file for this peer2peer network
         readConfigFile(configFilePath);
+        // register the each peers' files
         registerAllPeersFiles();
     }
+    /*
+    Main Method
+     */
     public static void main(String[] args) throws Exception{
         String configFilePath = "./config.txt";
         P2PNetwork network = new P2PNetwork(configFilePath);
-
+        // wait for registering
+        Thread.sleep(2000);
         System.out.println("Set up a peer by entering the PEER ID (a, b, c, d, e) :)");
         Scanner userInput = new Scanner(System.in);
         String varInput = userInput.nextLine();
@@ -37,22 +49,28 @@ public class P2PNetwork {
             if ("1".equals(varInput)) {
                 System.out.println("Enter the file name: ");
                 varInput = userInput.nextLine();
-                p.createFile(varInput);
-                p.registerFile(varInput, network.indexingServer.getAddress(), network.indexingServer.getPort());
+                boolean ifSuccess = p.createFile(varInput);
+                if (ifSuccess) {
+                    System.out.println("Create " + varInput + " Successfully!");
+                    p.initialNewFile(varInput, network.indexingServer.getAddress(), network.indexingServer.getPort());
+                }else{
+                    System.out.println("Create " + varInput + " Unsuccessfully!");
+                }
             }else if ("2".equals(varInput)){
                 System.out.println("Enter the file name: ");
                 varInput = userInput.nextLine();
-                String addressPort = p.searchFile(varInput, network.indexingServer.getAddress(), network.indexingServer.getPort());
-                System.out.println(addressPort);
+                List<String> addressPortList = p.searchFile(varInput, network.indexingServer.getAddress(),
+                        network.indexingServer.getPort());
             }else if ("3".equals(varInput)){
                 System.out.println("Enter the file name: ");
                 varInput = userInput.nextLine();
-                String addressPort = p.searchFile(varInput, network.indexingServer.getAddress(), network.indexingServer.getPort());
-                String[] array = addressPort.split(";");
+                List<String> addressPortList = p.searchFile(varInput, network.indexingServer.getAddress(),
+                        network.indexingServer.getPort());
+                String[] array = addressPortList.get(0).split(";");
                 if (array.length != 2)
                     break;
                 p.obtainFile(varInput, array[0], Integer.parseInt(array[1]));
-                System.out.println("Download " + varInput + " successfully!");
+                p.initialNewFile(varInput, network.indexingServer.getAddress(), network.indexingServer.getPort());
             }else if ("4".equals(varInput)) {
                 System.exit(0);
             }else{
@@ -71,11 +89,18 @@ public class P2PNetwork {
         }
         return null;
     }
+
+    /*
+    register all peers' files
+     */
     private void registerAllPeersFiles(){
         for (Peer p : peerList){
             p.registerAllFiles(this.indexingServer.getAddress(), this.indexingServer.getPort());
         }
     }
+    /*
+    read config file for constructing peer2peer network
+     */
     private void readConfigFile(String configFilePath){
         try {
             File file = new File(configFilePath);
@@ -85,10 +110,13 @@ public class P2PNetwork {
                 String[] configArray = strLine.split(" ");
                 System.out.println("-------------------------------------------------");
                 if (configArray[0].equals("indexingServer")){
+                    // constructing indexing server
                     this.indexingServer = new IndexingServer(configArray[0], configArray[1], Integer.parseInt(configArray[2]));
                 }else{
+                    // constructing each peers
                     peerList.add(new Peer(configArray[0], configArray[1], Integer.parseInt(configArray[2]), configArray[3]));
                 }
+                System.out.println("-------------------------------------------------");
             }
         }catch(Exception e){
             e.printStackTrace();
