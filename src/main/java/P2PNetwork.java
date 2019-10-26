@@ -1,8 +1,7 @@
-import com.alibaba.fastjson.JSONObject;
+
 import java.io.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Scanner;
+import java.util.*;
+
 
 /**
  * Main class for running, including an indexing server and a list of peers.
@@ -16,16 +15,21 @@ public class P2PNetwork {
     public P2PNetwork(String configFilePath){
         peerList = new ArrayList<Peer>();
         // read the config file for this peer2peer network
-        readConfigFile(configFilePath);
+        List<String[]> networkInformation = readConfigFile(configFilePath);
+        // initialize network
+        initializeNetwork(20, networkInformation);
         // register the each peers' files
         registerAllPeersFiles();
     }
 
-    public P2PNetwork(String configFilePath, int M){
+    public P2PNetwork(String configFilePath, int M, int N, int f){
         peerList = new ArrayList<Peer>();
         // read the config file for this peer2peer network
-        readConfigFile(configFilePath);
-        // create M files with random size, assign these files to peers randomly
+        List<String[]> networkInformation = readConfigFile(configFilePath);
+        // initialize network
+        initializeNetwork(M, networkInformation);
+        // register the each peers' files
+        registerAllPeersFiles();
     }
     /*
     Main Method
@@ -39,6 +43,9 @@ public class P2PNetwork {
                 // args [M, N, f]
                 // M -> files, N -> requests, f -> frequency
                 // M must larger than 5 since there are 5 peers in this network
+                int M = Integer.parseInt(args[0]);
+                int N = Integer.parseInt(args[1]);
+                int f = Integer.parseInt(args[2]);
                 network.testMode();
             } else {
                 System.out.println("Manual mode");
@@ -47,6 +54,92 @@ public class P2PNetwork {
         }catch (Exception e){
             e.printStackTrace();
         }
+
+    }
+    private void initializeNetwork(int M, List<String[]> networkInformation){
+        if (networkInformation.equals(null)){
+            System.out.println("fail to initialize network");
+            System.exit(0);
+        }
+        List<String> dataFolders = new ArrayList<String>();
+        for (int i = 0; i < networkInformation.size(); i++){
+            if (i != 0){
+                dataFolders.add(networkInformation.get(i)[3]);
+            }
+        }
+        try {
+            initializeFileWithSize(M, dataFolders);
+            for (int i = 0; i < networkInformation.size(); i++) {
+                String[] configArray = networkInformation.get(i);
+                if (i == 0) {
+                    this.indexingServer = new IndexingServer(configArray[0], configArray[1], Integer.parseInt(configArray[2]));
+                } else {
+                    peerList.add(new Peer(configArray[0], configArray[1], Integer.parseInt(configArray[2]), configArray[3]));
+                }
+            }
+        } catch (Exception e){
+            e.printStackTrace();
+        }
+    }
+
+    private void initializeRequestsQueue(int M, int N){
+        List<String> requests = new ArrayList<String>();
+        List<Set<String>> peerFilesRecorder = new ArrayList<Set<String>>();
+
+        for (int i = 0; i < peerList.size(); i++){
+            peerFilesRecorder.add(new HashSet<String>(peerList.get(i).getLocalFiles().keySet()));
+        }
+        Random r = new Random();
+        for (int i = 0; i < N; i++){
+            int index = r.nextInt(peerList.size());
+            while (peerFilesRecorder.get(index).size() == M){
+                index = r.nextInt(peerList.size());
+            }
+            String res = null;
+            for (int j = 0; j < M; j++){
+                String temp = String.valueOf(j) + ".txt";
+                if (!peerFilesRecorder.get(index).contains(temp)){
+                    res = temp;
+                }
+            }
+            if (res != null){
+
+            }
+
+        }
+    }
+
+    private void initializeFileWithSize(int M, List<String> dataFolders) throws IOException{
+        Random r = new Random();
+        for (int i = 0; i < M; i++){
+            String fileName = String.valueOf(i) + ".txt";
+            int fileSize = (int) Math.floor(r.nextDouble() * 90000) + 10000;
+            fileSize = fileSize < 0 ? - fileSize : fileSize;
+            File file = null;
+            for (int j = 0; j < dataFolders.size(); j++){
+                if (r.nextFloat() <= 0.4){
+                    if (file == null){
+                        file = new File(dataFolders.get(j) + "/" + fileName);
+                        RandomAccessFile raf = new RandomAccessFile(file, "rw");
+                        raf.setLength(fileSize);
+                    }else{
+                        BufferedInputStream bis = new BufferedInputStream(new FileInputStream(file));
+                        BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(dataFolders.get(j) + "/" + fileName));
+
+                        byte [] buf = new byte [1024];
+                        int len = 0;
+                        while((len = bis.read(buf))!=-1){
+                            bos.write(buf, 0, len);
+                        }
+                        bos.flush();
+                        bos.close();
+                        bis.close();
+                    }
+                }
+            }
+        }
+
+
 
     }
 
@@ -129,25 +222,26 @@ public class P2PNetwork {
     /*
     read config file for constructing peer2peer network
      */
-    private void readConfigFile(String configFilePath){
+    private List<String[]> readConfigFile(String configFilePath){
+        List<String[]> networkInformation = new ArrayList<String []>();
+        BufferedReader bufferedReader;
         try {
             File file = new File(configFilePath);
-            BufferedReader bufferedReader = new BufferedReader(new FileReader(file));
+            bufferedReader = new BufferedReader(new FileReader(file));
             String strLine = null;
             while(null != (strLine = bufferedReader.readLine())){
                 String[] configArray = strLine.split(" ");
-                System.out.println("-------------------------------------------------");
                 if (configArray[0].equals("indexingServer")){
-                    // constructing indexing server
-                    this.indexingServer = new IndexingServer(configArray[0], configArray[1], Integer.parseInt(configArray[2]));
+                    networkInformation.add(new String[] {configArray[0], configArray[1], configArray[2], ""});
                 }else{
-                    // constructing each peers
-                    peerList.add(new Peer(configArray[0], configArray[1], Integer.parseInt(configArray[2]), configArray[3]));
+                    networkInformation.add(configArray);
                 }
-                System.out.println("-------------------------------------------------");
             }
+            bufferedReader.close();
+            return networkInformation;
         }catch(Exception e){
             e.printStackTrace();
         }
+        return null;
     }
 }

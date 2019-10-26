@@ -1,17 +1,25 @@
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * A class for peer
  */
 public class Peer extends Server implements Runnable{
+
     // fileName -> absolute path
     private Map<String, String> localFiles;
     // current peer's folder
     private String dataFolder;
     // keep a socket that the peer can accept socket constantly
     private ServerSocket serverSocket;
+    // Manage threads
+    private ThreadPoolExecutor threadPoolExecutor;
+
     /*
     Construct method
      */
@@ -23,6 +31,9 @@ public class Peer extends Server implements Runnable{
         this.localFiles = new HashMap<String, String>();
         initializeLocalFiles();
         serverSocket = new ServerSocket(port);
+        this.threadPoolExecutor = new ThreadPoolExecutor(4, 8, 1000,
+                TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>(), Executors.defaultThreadFactory(),
+                new ThreadPoolExecutor.AbortPolicy());
         System.out.println("Activate " + name + " " + address + " " + String.valueOf(port));
         // use another thread to run this peer
         new Thread(this).start();
@@ -228,11 +239,15 @@ public class Peer extends Server implements Runnable{
             while (true){
                 socket = this.serverSocket.accept();
                 // use another thread to process this socket
-                new Thread(new Task(socket)).start();
+                threadPoolExecutor.execute(new Task(socket));
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    public Map<String, String> getLocalFiles() {
+        return localFiles;
     }
 
 

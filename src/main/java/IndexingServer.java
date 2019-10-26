@@ -3,6 +3,10 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.*;
 import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Class of IndexingServer
@@ -14,6 +18,8 @@ public class IndexingServer extends Server implements Runnable{
     private Map<String, Integer> pollingIndexer;
     // Keep a socket for indexing server
     private ServerSocket serverSocket;
+    // Manage threads
+    private ThreadPoolExecutor threadPoolExecutor;
     public IndexingServer(String name, String address, int port) throws IOException {
         this.name = name;
         this.address = address;
@@ -21,6 +27,10 @@ public class IndexingServer extends Server implements Runnable{
         this.fileRecorder = new HashMap<String, List<String>>();
         this.pollingIndexer = new HashMap<String, Integer>();
         this.serverSocket = new ServerSocket(port);
+        this.threadPoolExecutor = new ThreadPoolExecutor(4, 8, 1000,
+                TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>(), Executors.defaultThreadFactory(),
+                new ThreadPoolExecutor.AbortPolicy());
+
         System.out.println("Activate " + name + " " + address + " " + String.valueOf(port));
         // Use another thread to run indexing server
         new Thread(this).start();
@@ -87,7 +97,7 @@ public class IndexingServer extends Server implements Runnable{
             while (true) {
                 socket = this.serverSocket.accept();
                 // use another thread to process this socket
-                new Thread(new Task(socket)).start();
+                threadPoolExecutor.execute(new Task(socket));
             }
         } catch (IOException e) {
             e.printStackTrace();
