@@ -55,7 +55,7 @@ public class Peer extends Server implements Runnable{
      * @param fileName
      * @return
      */
-    public boolean createFile(String fileName){
+    public boolean createFile(String fileName, long length){
         File temp = new File(this.dataFolder);
         File[] files = temp.listFiles();
         if (files != null){
@@ -68,12 +68,14 @@ public class Peer extends Server implements Runnable{
         }
         try {
             File file = new File(this.dataFolder + "/" + fileName);
-            boolean res = file.createNewFile();
-            return res;
+            RandomAccessFile raf = new RandomAccessFile(file, "rw");
+            raf.setLength(length);
+            return true;
         }catch (Exception e){
             e.printStackTrace();
+        }finally {
+            return false;
         }
-        return false;
     }
 
     /**
@@ -107,11 +109,14 @@ public class Peer extends Server implements Runnable{
      * @param address the address of indexing server
      * @param port the port of indexing server
      */
-    public void initialNewFile(String fileName, String address, int port){
+    public void initialLocalFile(String fileName, String address, int port){
         File file = new File(this.dataFolder + "/" + fileName);
-        localFiles.put(fileName, file.getAbsolutePath());
-        registerFile(fileName, address, port);
-
+        if (file.exists()) {
+            localFiles.put(fileName, file.getAbsolutePath());
+            registerFile(fileName, address, port);
+        }else{
+            System.out.println(fileName + " not exists in peer " + this.name);
+        }
     }
 
     /**

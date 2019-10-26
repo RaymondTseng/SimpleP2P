@@ -29,7 +29,7 @@ public class IndexingServer extends Server implements Runnable{
     /*
     Check whether fileName exists in servers
      */
-    private void search(String fileName, Socket socket){
+    synchronized private void search(String fileName, Socket socket){
         RequestPackage rp;
         System.out.println("Finding " + fileName);
         if (fileRecorder.containsKey(fileName)) {

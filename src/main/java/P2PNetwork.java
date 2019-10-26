@@ -20,18 +20,47 @@ public class P2PNetwork {
         // register the each peers' files
         registerAllPeersFiles();
     }
+
+    public P2PNetwork(String configFilePath, int M){
+        peerList = new ArrayList<Peer>();
+        // read the config file for this peer2peer network
+        readConfigFile(configFilePath);
+        // create M files with random size, assign these files to peers randomly
+    }
     /*
     Main Method
      */
-    public static void main(String[] args) throws Exception{
+    public static void main(String[] args) {
         String configFilePath = "./config.txt";
-        P2PNetwork network = new P2PNetwork(configFilePath);
+        try {
+            P2PNetwork network = new P2PNetwork(configFilePath);
+            if (args.length == 3) {
+                System.out.println("Test mode");
+                // args [M, N, f]
+                // M -> files, N -> requests, f -> frequency
+                // M must larger than 5 since there are 5 peers in this network
+                network.testMode();
+            } else {
+                System.out.println("Manual mode");
+                network.manualMode();
+            }
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+
+    }
+
+    public void testMode() throws Exception{
+
+    }
+
+    public void manualMode() throws Exception{
         // wait for registering
         Thread.sleep(2000);
         System.out.println("Set up a peer by entering the PEER ID (a, b, c, d, e) :)");
         Scanner userInput = new Scanner(System.in);
         String varInput = userInput.nextLine();
-        Peer p = network.findPeerByName(varInput);
+        Peer p = findPeerByName(varInput);
         if (p == null){
             System.out.println("Peer Id doesn't exist");
             System.exit(0);
@@ -49,28 +78,28 @@ public class P2PNetwork {
             if ("1".equals(varInput)) {
                 System.out.println("Enter the file name: ");
                 varInput = userInput.nextLine();
-                boolean ifSuccess = p.createFile(varInput);
+                boolean ifSuccess = p.createFile(varInput, 10000);
                 if (ifSuccess) {
                     System.out.println("Create " + varInput + " Successfully!");
-                    p.initialNewFile(varInput, network.indexingServer.getAddress(), network.indexingServer.getPort());
+                    p.initialLocalFile(varInput, indexingServer.getAddress(), indexingServer.getPort());
                 }else{
                     System.out.println("Create " + varInput + " Unsuccessfully!");
                 }
             }else if ("2".equals(varInput)){
                 System.out.println("Enter the file name: ");
                 varInput = userInput.nextLine();
-                List<String> addressPortList = p.searchFile(varInput, network.indexingServer.getAddress(),
-                        network.indexingServer.getPort());
+                List<String> addressPortList = p.searchFile(varInput, indexingServer.getAddress(),
+                        indexingServer.getPort());
             }else if ("3".equals(varInput)){
                 System.out.println("Enter the file name: ");
                 varInput = userInput.nextLine();
-                List<String> addressPortList = p.searchFile(varInput, network.indexingServer.getAddress(),
-                        network.indexingServer.getPort());
+                List<String> addressPortList = p.searchFile(varInput, indexingServer.getAddress(),
+                        indexingServer.getPort());
                 String[] array = addressPortList.get(0).split(";");
                 if (array.length != 2)
                     break;
                 p.obtainFile(varInput, array[0], Integer.parseInt(array[1]));
-                p.initialNewFile(varInput, network.indexingServer.getAddress(), network.indexingServer.getPort());
+                p.initialLocalFile(varInput, indexingServer.getAddress(), indexingServer.getPort());
             }else if ("4".equals(varInput)) {
                 System.exit(0);
             }else{
@@ -78,7 +107,6 @@ public class P2PNetwork {
             }
 
         }
-
     }
 
     public Peer findPeerByName(String name){
