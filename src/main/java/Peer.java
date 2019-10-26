@@ -20,6 +20,11 @@ public class Peer extends Server implements Runnable{
     // Manage threads
     private ThreadPoolExecutor threadPoolExecutor;
 
+    // metric
+    private int messagesExchanged = 0;
+    private int bytesTransferred = 0;
+    private long responseTime = 0;
+
     /*
     Construct method
      */
@@ -94,9 +99,20 @@ public class Peer extends Server implements Runnable{
      * @param address the address of indexing server
      * @param port the port of indexing server
      */
-    public void registerAllFiles(String address, int port){
+    public void registerAllLocalFiles(String address, int port){
+        List<String> fileNames = new ArrayList<String>();
         for (String fileName : localFiles.keySet()){
-            registerFile(fileName, address, port);
+            fileNames.add(fileName);
+        }
+        try {
+            Socket socket = new Socket(address, port);
+            ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream());
+            RequestPackage rp = new RequestPackage(0, this.address, this.port, fileNames);
+            oos.writeObject(rp);
+            oos.flush();
+            oos.close();
+        } catch (Exception e){
+            e.printStackTrace();
         }
     }
 
@@ -147,12 +163,18 @@ public class Peer extends Server implements Runnable{
 
             oos.writeObject(rp);
             oos.flush();
+            long startTime = System.currentTimeMillis();
 
 
             ObjectInputStream ois = new ObjectInputStream(socket.getInputStream());
+            long endTime = System.currentTimeMillis();
+            responseTime += endTime - startTime;
+            messagesExchanged += 1;
+            bytesTransferred = socket.getInputStream().available();
             rp = (RequestPackage) ois.readObject();
             ois.close();
             oos.close();
+
             if (rp.getRequestType() != -1){
                 System.out.println("File exists in");
                 for (String name : rp.getFileNames()){
@@ -188,8 +210,13 @@ public class Peer extends Server implements Runnable{
             RequestPackage rp = new RequestPackage(2, this.address, this.port, fileNames);
             oos.writeObject(rp);
             oos.flush();
+            long startTime = System.currentTimeMillis();
 
             BufferedInputStream bis = new BufferedInputStream(socket.getInputStream());
+            long endTime = System.currentTimeMillis();
+            responseTime += endTime - startTime;
+            messagesExchanged += 1;
+            bytesTransferred = socket.getInputStream().available();
             BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(this.dataFolder + "/" + fileName));
 
             byte [] buf = new byte [1024];
@@ -202,6 +229,7 @@ public class Peer extends Server implements Runnable{
             bos.close();
             bis.close();
             System.out.println("Download " + fileName + " successfully!");
+
         }catch (Exception e){
             e.printStackTrace();
         }
@@ -212,7 +240,7 @@ public class Peer extends Server implements Runnable{
      * @param fileName
      * @param socket
      */
-    public void sendFile(String fileName, Socket socket){
+    synchronized public void sendFile(String fileName, Socket socket){
         try {
 
             BufferedInputStream bis = new BufferedInputStream(new FileInputStream(this.dataFolder + "/" + fileName));
@@ -250,6 +278,17 @@ public class Peer extends Server implements Runnable{
         return localFiles;
     }
 
+    public int getMessagesExchanged() {
+        return messagesExchanged;
+    }
+
+    public int getBytesTransferred() {
+        return bytesTransferred;
+    }
+
+    public long getResponseTime() {
+        return responseTime;
+    }
 
     class Task implements Runnable{
         private Socket socket;
@@ -260,6 +299,8 @@ public class Peer extends Server implements Runnable{
         public void run() {
             ObjectInputStream ois = null;
             try{
+                messagesExchanged += 1;
+                bytesTransferred = this.socket.getInputStream().available();
                 ois = new ObjectInputStream(this.socket.getInputStream());
                 RequestPackage rp = (RequestPackage) ois.readObject();
                 if (rp.getRequestType() == 2){

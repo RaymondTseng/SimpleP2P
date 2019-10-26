@@ -1,6 +1,7 @@
 
 import java.io.*;
 import java.util.*;
+import java.util.concurrent.*;
 
 
 /**
@@ -22,7 +23,7 @@ public class P2PNetwork {
         registerAllPeersFiles();
     }
 
-    public P2PNetwork(String configFilePath, int M, int N, int f){
+    public P2PNetwork(String configFilePath, int M){
         peerList = new ArrayList<Peer>();
         // read the config file for this peer2peer network
         List<String[]> networkInformation = readConfigFile(configFilePath);
@@ -37,7 +38,6 @@ public class P2PNetwork {
     public static void main(String[] args) {
         String configFilePath = "./config.txt";
         try {
-            P2PNetwork network = new P2PNetwork(configFilePath);
             if (args.length == 3) {
                 System.out.println("Test mode");
                 // args [M, N, f]
@@ -46,9 +46,11 @@ public class P2PNetwork {
                 int M = Integer.parseInt(args[0]);
                 int N = Integer.parseInt(args[1]);
                 int f = Integer.parseInt(args[2]);
-                network.testMode();
+                P2PNetwork network = new P2PNetwork(configFilePath, M);
+                network.testMode(M, N, f);
             } else {
                 System.out.println("Manual mode");
+                P2PNetwork network = new P2PNetwork(configFilePath);
                 network.manualMode();
             }
         }catch (Exception e){
@@ -82,7 +84,47 @@ public class P2PNetwork {
         }
     }
 
-    private void initializeRequestsQueue(int M, int N){
+    private void runAllRequests(List<String> requests, int f){
+        ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(20, 100, 1000,
+                TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>(), Executors.defaultThreadFactory(),
+                new ThreadPoolExecutor.AbortPolicy());
+        try {
+            for (String request : requests) {
+                String[] array = request.split(";");
+                int index = Integer.parseInt(array[0]);
+                String fileName = array[1];
+                threadPoolExecutor.execute(new TestTask(index, fileName));
+                Thread.sleep(f);
+            }
+
+        } catch (Exception e){
+            e.printStackTrace();
+        } finally {
+            System.out.println("System does not finish all requests");
+        }
+
+    }
+
+    class TestTask implements Runnable{
+        private int index;
+        private String fileName;
+        public TestTask(int index, String fileName){
+            this.index = index;
+            this.fileName = fileName;
+        }
+        public void run() {
+            Peer p = peerList.get(index);
+            List<String> addressPortList = p.searchFile(fileName, indexingServer.getAddress(),
+                    indexingServer.getPort());
+            String[] array = addressPortList.get(0).split(";");
+            if (array.length != 2)
+                return;
+            p.obtainFile(fileName, array[0], Integer.parseInt(array[1]));
+            p.initialLocalFile(fileName, indexingServer.getAddress(), indexingServer.getPort());
+        }
+    }
+
+    private List<String> initializeRequestsQueue(int M, int N){
         List<String> requests = new ArrayList<String>();
         List<Set<String>> peerFilesRecorder = new ArrayList<Set<String>>();
 
@@ -95,29 +137,33 @@ public class P2PNetwork {
             while (peerFilesRecorder.get(index).size() == M){
                 index = r.nextInt(peerList.size());
             }
-            String res = null;
             for (int j = 0; j < M; j++){
                 String temp = String.valueOf(j) + ".txt";
                 if (!peerFilesRecorder.get(index).contains(temp)){
-                    res = temp;
+                    requests.add(String.valueOf(index) + ";" + temp);
+                    peerFilesRecorder.get(index).add(temp);
+                    break;
                 }
-            }
-            if (res != null){
-
             }
 
         }
+        return requests;
     }
 
     private void initializeFileWithSize(int M, List<String> dataFolders) throws IOException{
+        for (String dataFolder :dataFolders){
+            Utils.delAllFilesInFolder(dataFolder);
+        }
         Random r = new Random();
         for (int i = 0; i < M; i++){
             String fileName = String.valueOf(i) + ".txt";
             int fileSize = (int) Math.floor(r.nextDouble() * 90000) + 10000;
             fileSize = fileSize < 0 ? - fileSize : fileSize;
             File file = null;
+            boolean ifAssign = false;
             for (int j = 0; j < dataFolders.size(); j++){
                 if (r.nextFloat() <= 0.4){
+                    ifAssign = true;
                     if (file == null){
                         file = new File(dataFolders.get(j) + "/" + fileName);
                         RandomAccessFile raf = new RandomAccessFile(file, "rw");
@@ -137,14 +183,38 @@ public class P2PNetwork {
                     }
                 }
             }
+            if (!ifAssign){
+                file = new File(dataFolders.get(r.nextInt(dataFolders.size())) + "/" + fileName);
+                RandomAccessFile raf = new RandomAccessFile(file, "rw");
+                raf.setLength(fileSize);
+            }
         }
 
 
 
     }
 
-    public void testMode() throws Exception{
-
+    public void testMode(int M, int N, int f) {
+        // initialize and assign all requests
+        List<String> requests = initializeRequestsQueue(M, N);
+        // run all requests
+        runAllRequests(requests, f);
+        System.out.println("Test Mode done!");
+        int messagesExchanged = 0;
+        int bytesTransferred = 0;
+        long responseTime = 0;
+        messagesExchanged += this.indexingServer.getMessagesExchanged();
+        bytesTransferred += this.indexingServer.getBytesTransferred();
+        for (Peer p : peerList){
+            messagesExchanged += p.getMessagesExchanged();
+            bytesTransferred += p.getBytesTransferred();
+            responseTime += p.getResponseTime();
+        }
+        System.out.println("Metric:");
+        System.out.println("Messages Changed: " + String.valueOf(messagesExchanged));
+        System.out.println("Bytes Transferred: " + String.valueOf(bytesTransferred));
+        System.out.println("Response Time: " + String.valueOf(responseTime / (long) peerList.size()));
+        System.exit(0);
     }
 
     public void manualMode() throws Exception{
@@ -216,7 +286,7 @@ public class P2PNetwork {
      */
     private void registerAllPeersFiles(){
         for (Peer p : peerList){
-            p.registerAllFiles(this.indexingServer.getAddress(), this.indexingServer.getPort());
+            p.registerAllLocalFiles(this.indexingServer.getAddress(), this.indexingServer.getPort());
         }
     }
     /*

@@ -20,6 +20,11 @@ public class IndexingServer extends Server implements Runnable{
     private ServerSocket serverSocket;
     // Manage threads
     private ThreadPoolExecutor threadPoolExecutor;
+
+    // metric
+    private int messagesExchanged = 0;
+    private int bytesTransferred = 0;
+
     public IndexingServer(String name, String address, int port) throws IOException {
         this.name = name;
         this.address = address;
@@ -104,6 +109,14 @@ public class IndexingServer extends Server implements Runnable{
         }
     }
 
+    public int getMessagesExchanged() {
+        return messagesExchanged;
+    }
+
+    public int getBytesTransferred() {
+        return bytesTransferred;
+    }
+
     /**
      * A class for processing socket
      */
@@ -116,6 +129,8 @@ public class IndexingServer extends Server implements Runnable{
         public void run() {
             ObjectInputStream ois = null;
             try{
+                messagesExchanged += 1;
+                bytesTransferred = this.socket.getInputStream().available();
                 ois = new ObjectInputStream(this.socket.getInputStream());
                 RequestPackage rp = (RequestPackage) ois.readObject();
                 // different types mean different requests
